@@ -44,6 +44,7 @@ tests-scan tool:
 
 #### Note on eslintrc interaction
 
+CHANGE
 As eslint looks for additional configurations, eslintrc.(json|yaml) files, in
 parent directories, it is recommended to have `"root": true` in the eslint
 configuration of any project which is using eslint and is tested through
