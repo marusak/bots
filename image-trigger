@@ -28,6 +28,7 @@ REFRESH = {
     "fedora-32": {},
     "fedora-33": {},
     "fedora-testing": {},
+    "fedora-eln": {},
     "fedora-coreos": {},
     "ubuntu-2004": {},
     "ubuntu-stable": {},
