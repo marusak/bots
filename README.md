@@ -177,3 +177,9 @@ instead the images are created on the main feature pull request and
 sit there for a long time, they might cause annoying merge conflicts.
 
 [1]: https://blog.christophersmart.com/2016/08/31/configuring-qemu-bridge-helper-after-access-denied-by-acl-file-error/
+
+
+### Notes TODO clean me up
+1. How to store...
+2. How to localy develop stuff
+Firefox needs `privacy.file_unique_origin` to be False
