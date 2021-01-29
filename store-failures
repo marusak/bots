@@ -31,8 +31,21 @@ from datetime import datetime
 from task import github
 from machine.machine_core.constants import IMAGES_DIR
 
-# regexp for retry reason in a "not ok" line
+# Result line has form like:
+# ok 2 test/verify/check-accounts TestAccounts.testExpire [ND@1]
+# ok 103 test/verify/check-multi-machine TestMultiMachine.testTroubleshooting
+# ok 289 test/verify/check-machines-lifecycle TestMachinesLifecycle.testDelete [ND@1] # SKIP Known issue #1543
+
+# not ok 117 test/verify/check-metrics TestMetrics.testPcp
+# not ok 305 test/verify/check-networking-bond TestBonding.testActive [ND@1]
+# not ok 24 test/verify/check-foobar TestExample.testBasic [ND] # RETRY 2 (be robust against unstable tests)
+
+# older logs look like this instead:
+# not ok 78 testNodeNavigation (check_openshift.TestOpenshift) # duration: 172s
+re_run = re.compile(r"(not )?ok \d+ (\S+) (\S+)")
 re_retry = re.compile(r"# RETRY .* \(([^)]+)\)")
+
+DF = "%Y-%m-%dT%H:%M:%S%z"
 
 
 def main():
@@ -81,16 +94,17 @@ def main():
             contexts[context] = []
 
         if status["state"] == "pending":
-            if "Testing in progress" in status["description"]:
+            desc = status["description"]
+            if "Testing in progress" in desc:
                 contexts[context][-1]["url"] = status["target_url"]
-                contexts[context][-1]["started"] = datetime.strptime(status["created_at"], "%Y-%m-%dT%H:%M:%S%z").timestamp()
-            elif "Not yet tested" in status["description"]:
-                new_run = {"posted": datetime.strptime(status["created_at"], "%Y-%m-%dT%H:%M:%S%z").timestamp(), "repo": repo}
+                contexts[context][-1]["started"] = datetime.strptime(status["created_at"], DF).timestamp()
+            elif "Not yet tested" in desc:
+                new_run = {"posted": datetime.strptime(status["created_at"], DF).timestamp(), "repo": repo}
                 contexts[context].append(new_run)
             else:
-                logging.warning("Pending status has unexpected description '{0}', skipping.".format(status["description"]))
+                logging.warning("Pending status has unexpected description '{0}', skipping.".format(desc))
         elif status["state"] in ["success", "failure", "error"]:
-            contexts[context][-1]["finished"] = datetime.strptime(status["created_at"], "%Y-%m-%dT%H:%M:%S%z").timestamp()
+            contexts[context][-1]["finished"] = datetime.strptime(status["created_at"], DF).timestamp()
             contexts[context][-1]["state"] = status["state"]
             if status["state"] == "error":
                 contexts[context][-1]["description"] = status["description"]
@@ -112,7 +126,7 @@ def main():
                 "(retry no." + str(retry) + ")" if retry else "",
                 status["state"] + (" (" + status["description"] + ")" if status.get("description") else ""),
                 waited, took, status["repo"], url
-                ))
+            ))
 
             row = cursor.execute("SELECT id FROM TestRuns WHERE url = ?", (url, )).fetchone()
             if row is not None:
@@ -120,14 +134,15 @@ def main():
                 continue
 
             run_id = insert_run(cursor, status["repo"], opts.revision, context, url,
-                    status["posted"], retry, waited, took, status["state"], status.get("description"))
+                                status["posted"], retry, waited, took, status["state"],
+                                status.get("description"))
 
             raw_log = url[:-5] if url.endswith(".html") else url
             logging.debug("scanning log %s", raw_log)
 
             with urllib.request.urlopen(raw_log, context=ctx if "logs.cockpit-project.org" in raw_log else None) as fp:
-                for (testname, retry_reason) in find_failed_tests(fp):
-                    insert_failure(cursor, run_id, testname, retry_reason)
+                for (testname, failed, retry_reason) in find_tests(fp):
+                    insert_test(cursor, run_id, testname, failed, retry_reason)
 
     db_conn.commit()
     db_conn.close()
@@ -148,9 +163,10 @@ def init_db(cursor):
                      description TEXT,
                      UNIQUE (url))
                    """)
-    cursor.execute("""CREATE TABLE if not exists Failures
+    cursor.execute("""CREATE TABLE if not exists Tests
                     (testname TEXT NOT NULL,
                      retry_reason TEXT,
+                     failed INTEGER,
                      run INTEGER NOT NULL,
                      FOREIGN KEY (run) REFERENCES TestRuns(id))
                    """)
@@ -161,11 +177,11 @@ def insert_run(cursor, project, revision, context, url, time, retry, waited, too
                           (project, revision, context, url, time, retry, waited, took, state, desc)).lastrowid
 
 
-def insert_failure(cursor, run_id, testname, retry_reason):
-    cursor.execute("INSERT INTO Failures VALUES (?, ?, ?)", (testname, retry_reason, run_id))
+def insert_test(cursor, run_id, testname, failed, retry_reason):
+    cursor.execute("INSERT INTO Tests VALUES (?, ?, ?, ?)", (testname, retry_reason, 1 if failed else 0, run_id))
 
 
-def find_failed_tests(fp):
+def find_tests(fp):
     last_msg = ""
     save_message = False
     for line in fp:
@@ -184,18 +200,13 @@ def find_failed_tests(fp):
         if "FAIL: Test completed, but found unexpected" in line and "raise" not in line:
             save_message = True
 
-        if line.startswith("not ok "):
-            # Result line has form like:
-            # not ok 24 test/verify/check-foobar TestExample.testBasic [ND] # RETRY 2 (be robust against unstable tests)
-            # older logs look like this instead:
-            # not ok 78 testNodeNavigation (check_openshift.TestOpenshift) # duration: 172s
-            fields = line.split(" ")
+        m = re_run.search(line)
+        if (m):
             # sometimes line breaks are missing:
             # not ok 117 test/verify/check-metrics TestMetrics.testPcp# ------
-            fields[4] = fields[4].rstrip("#")
-            testname = "{0} {1}".format(fields[3], fields[4])
-            m = re_retry.search(line)
-            yield (testname, last_msg or (m and m.group(1) or None))
+            testname = "{0} {1}".format(m.group(2), m.group(3)).rstrip("#")
+            r = re_retry.search(line)
+            yield (testname, bool(m.group(1)), last_msg or (r and r.group(1) or None))
             last_msg = ""
 
 
