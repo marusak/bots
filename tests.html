@@ -22,6 +22,12 @@
                 </select>
             </div>
         </div>
+        <nav aria-label="breadcrumb" id="nav" hidden>
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="#" id="overview">Overview</a></li>
+                <li class="breadcrumb-item active" aria-current="page" id="current"></li>
+            </ol>
+        </nav>
         <div class="container-fluid px-5">
             <div class="row">
                 <div class="col-md-6">
@@ -56,6 +62,18 @@
         location.reload();
     });
 
+    if (test) {
+        document.getElementById("nav").hidden = false;
+        document.getElementById("current").innerHTML = test;
+        document.getElementById("overview").onclick = () => {
+            params.delete("test");
+            history.replaceState(null, null, "?"+params.toString());
+            location.reload();
+        };
+    } else {
+        document.getElementById("nav").hidden = true;
+    }
+
     const config = {
       locateFile: filename => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.2.1/dist/${filename}`
     };
@@ -71,7 +89,6 @@
             const since = (new Date().getTime() / 1000) - days * DAY;
 
             if (test) {
-                // TODO back to overview
                 top10 = []
                 const rows = db.exec(`
                         SELECT context, COUNT(*) AS failed
@@ -124,7 +141,6 @@
                 }, {});
 
                 const data = [];
-                console.log(messages);
                 Object.keys(counter).forEach(m => {
                     if (counter[m] > 1) { // Don't show message that happened just once
                           logs = [...new Set(messages.filter(mx => mx[0] === m))].splice(0, 2);
