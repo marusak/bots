@@ -107,7 +107,7 @@
                     const urls = db.exec(`
                         SELECT DISTINCT TestRuns.url
                         FROM TestRuns JOIN Tests ON TestRuns.id = Tests.run
-                        WHERE testname = '${test}' AND TestRuns.context = '${row[0]}'
+                        WHERE testname = '${test}' AND TestRuns.context = '${row[0]}' AND failed = 1
                         ORDER BY run DESC
                         LIMIT 2`);
                     const links = urls[0].values.map(u => u[0]);
@@ -143,8 +143,8 @@
                 const data = [];
                 Object.keys(counter).forEach(m => {
                     if (counter[m] > 1) { // Don't show message that happened just once
-                          logs = [...new Set(messages.filter(mx => mx[0] === m))].splice(0, 2);
-                          data.push([m, counter[m], logs]);
+                        logs = messages.reduce((a, mx) => {if (mx[0] === m && a.indexOf(mx[1]) < 0) a.push(mx[1]); return a;}, []).splice(0, 2);
+                        data.push([m, counter[m], logs]);
                     }
                 });
                 data.sort((a, b) => a[1] < b[1]);
@@ -174,7 +174,7 @@
                     const urls = db.exec(`
                         SELECT DISTINCT TestRuns.url
                         FROM TestRuns JOIN Tests ON TestRuns.id = Tests.run
-                        WHERE testname = '${row[0]}'
+                        WHERE testname = '${row[0]}' AND failed = 1
                         ORDER BY run DESC
                         LIMIT 2`);
                     const links = urls[0].values.map(u => u[0]);
