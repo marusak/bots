@@ -94,7 +94,7 @@
             const data = [];
             Object.keys(counter).forEach(m => {
                 if (counter[m] > 1) { // Don't show message that happened just once
-                      logs = messages.filter(mx => mx[0] === m).splice(0, 2);
+                      logs = [...new Set(messages.filter(mx => mx[0] === m))].splice(0, 2);
                       data.push([m, counter[m], logs]);
                 }
             });
