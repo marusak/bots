@@ -118,6 +118,7 @@
             // Show % of failed tests per day
             const labels = [];
             const points = [];
+            const limit_points = [];
             const yesterday = new Date();
             yesterday.setHours(0, 0, 0, 0);
             for (let i = 0; i < days; i++) {
@@ -138,13 +139,14 @@
                         WHERE TestRuns.time > ${since.getTime() / 1000} AND TestRuns.time < ${to.getTime() / 1000}`);
                 labels.unshift(to.getDate() + "." + (to.getMonth() + 1));
                 points.unshift(failed[0].values[0]);
+                limit_points.push(1);
             }
-            createGraph("g1", "Percentage of failed tests per day", labels, points);
+            createGraph("g1", "Percentage of failed tests per day", labels, points, limit_points);
         };
         xhr.send();
     });
 
-    function createGraph(id, name, labels, points) {
+    function createGraph(id, name, labels, points, limit_points) {
         document.getElementById(id).innerHTML = "";
         document.getElementById(id + "-title").innerHTML = name;
 
@@ -158,6 +160,10 @@
                 datasets: [{
                     data: points,
                     borderColor: "rgba(24, 42, 94, 0.8)",
+                    fill: false,
+                }, {
+                    data: limit_points,
+                    borderColor: "rgba(1, 2, 3, 0.3)",
                     fill: false,
                 }]
             },
